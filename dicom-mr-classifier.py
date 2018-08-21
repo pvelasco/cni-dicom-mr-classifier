@@ -201,6 +201,14 @@ def get_seq_data(sequence, ignore_keys):
 def get_dicom_header(dcm):
     # Extract the header values
     header = {}
+
+    # Attempt to use key to get PSD
+    try:
+        header['psd'] = str(dcm[0x019, 0x109c].value)
+    except:
+        pass
+
+    # Get header values by tag
     exclude_tags = ['[Unknown]', 'PixelData', 'Pixel Data',  '[User defined data]', '[Protocol Data Block (compressed)]', '[Histogram tables]', '[Unique image iden]']
     tags = dcm.dir()
     for tag in tags:
@@ -429,9 +437,18 @@ def dicom_classify(zip_file_path, outbase, timezone, config_file=None):
 
     # Acquisition metadata
     metadata['acquisition'] = {}
+
+    if acquisition_timestamp:
+        metadata['acquisition']['timestamp'] = acquisition_timestamp
+
+    # Acquisition metadata from dicom header
+    dicom_file['info'] = get_dicom_header(dcm)
+
+    # Modality
     if hasattr(dcm, 'Modality') and dcm.get('Modality'):
         metadata['acquisition']['instrument'] = format_string(dcm.get('Modality'))
 
+    # Classification (TRY BY PSD FIRST? TODO)
     series_desc = format_string(dcm.get('SeriesDescription', ''))
     if series_desc:
         metadata['acquisition']['label'] = series_desc
@@ -451,21 +468,25 @@ def dicom_classify(zip_file_path, outbase, timezone, config_file=None):
         # Else classification is a list, assign dict with intent
         else:
             dicom_file['classification'] = nonimage_intent
-    if acquisition_timestamp:
-        metadata['acquisition']['timestamp'] = acquisition_timestamp
 
-    # Acquisition metadata from dicom header
-    dicom_file['info'] = get_dicom_header(dcm)
+    # TODO PSD classification
+    if hasattr(dicom_file['info'], 'psd'):
+        PSD = dicom_file['info']['psd'].lower()
+        multiband_feature = {'Features': ['Multi-Band']}
+        if PSD.startswith('mux'):
+            dicom_file['classification'].update(multiband_feature)
+        # Add the PSD to the custom classifications
+        custom = {'Custom': [PSD]}
+        dicom_file['classification'].update(custom)
 
-    # Append the dicom_file to the files array
-    metadata['acquisition']['files'] = [dicom_file]
-
-    # Acquisition metadata from dicom header
-    metadata['acquisition']['metadata'] = get_dicom_header(dcm)
+    # Siemens header
     if dcm.get('Manufacturer') == 'SIEMENS':
         csa_header = get_csa_header(dcm)
         if csa_header:
-            metadata['acquisition']['metadata']['CSAHeader'] = csa_header
+            dicom_file['info']['CSAHeader'] = csa_header
+
+    # Append the dicom_file to the files array
+    metadata['acquisition']['files'] = [dicom_file]
 
     # Write out the metadata to file (.metadata.json)
     metafile_outname = os.path.join(os.path.dirname(outbase),'.metadata.json')
