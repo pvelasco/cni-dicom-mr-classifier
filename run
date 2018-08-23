@@ -1,5 +1,4 @@
 #! /bin/bash
-# This script is meant to evoke the algorithm without requiring any input arguments
 #
 
 CONTAINER="[ stanfordcni/cni-dicom-mr-classifier ]"
@@ -61,43 +60,27 @@ else
   echo -e "$CONTAINER  Not syncing classification code. Using built-in version..."
 fi
 
+
 ##############################################################################
 # Check I/O directories and Generate metadata
 
-# Check that /output directory is empty
-if [ "-d" "$OUTPUT_DIR" ]
-    then
-        if [ "$(ls -A $OUTPUT_DIR)" ]; then
-            echo -e "$CONTAINER  Warning $OUTPUT_DIR is not Empty! Results may be overwritten."
-        fi
-    else
-        echo -e "$CONTAINER  $OUTPUT_DIR not found. It will be created."
-        mkdir $OUTPUT_DIR
+# Check for zipped input
+input_file=`find $INPUT_DIR -type f -name "*.zip*" | head -1`
+
+# Check for non-zipped files
+if [[ -z $input_file ]]; then
+  input_file=`find $INPUT_DIR -type f -not -path '*/\.*' | head -1`
 fi
 
-
-# Check for input
-if [[ -z $@ ]]
-    then
-      input_file=`find $INPUT_DIR -type f -name "*.zip*" | head -1`
-      # Check for non-zipped files
-      if [[ -z $input_file ]]; then
-        input_file=`find $INPUT_DIR -type f -not -path '*/\.*' | head -1`
-      fi
-
-      if [[ -n $input_file ]]
-        then
-            bni=`basename "$input_file"`
-            output_file_base=$OUTPUT_DIR/${bni%_dicom.zip}
-            PYHONPATH=$PYTHONPATH:/flywheel/v0/ python $FLYWHEEL_BASE/dicom-mr-classifier.py "$input_file" "$output_file_base" --config-file "$CONFIG_FILE"
-            E_STATUS=$?
-      else
-            echo -e "No inputs were provided and $INPUT_DIR has no valid input files!"
-            exit 1
-      fi
+if [[ -n $input_file ]]
+  then
+      bni=`basename "$input_file"`
+      output_file_base=$OUTPUT_DIR/${bni%_dicom.zip}
+      PYHONPATH=$PYTHONPATH:/flywheel/v0/ python $FLYWHEEL_BASE/dicom-mr-classifier.py "$input_file" "$output_file_base" --config-file "$CONFIG_FILE"
+      E_STATUS=$?
 else
-    PYHONPATH=$PYTHONPATH:/flywheel/v0/ python $FLYWHEEL_BASE/dicom-mr-classifier.py $@
-    E_STATUS=$?
+      echo -e "No inputs were provided and $INPUT_DIR has no valid input files!"
+      exit 1
 fi
 
 

@@ -331,6 +331,60 @@ def get_custom_classification(label, config_file):
 
     return None
 
+def get_psd_classification(PSD, SERIES_DESCRIPTION):
+    """ Determine classification from the PSD"""
+    classification = {}
+    # If this  is from one of the muxarcepi sequences (CNI specific), then
+    # we use our knowledge of the sequence to classify the file.
+    if PSD.startswith('muxarcepi'):
+        if PSD.startswith('muxarcepi2'):
+            classification['Measurement'] = ['Diffusion']
+            classification['Intent'] = ['Structural']
+        elif PSD.startswith('muxarcepi_IR'):
+            classification['Measurement'] = ['T1']
+            classification['Intent'] = ['Structural']
+            classification['Features'] = ['Quantitative']
+        elif PSD == 'muxarcepi_me':
+            classification['Measurement'] = ['T2*']
+            classification['Intent'] = ['Functional']
+            classification['Features'] = ['Multi-Echo']
+        elif PSD == 'muxarcepi' and SERIES_DESCRIPTION and SERIES_DESCRIPTION.find('fieldmap') == -1:
+            classification['Measurement'] = ['T2*']
+            classification['Intent'] = ['Functional']
+
+    # Use priors to determine classification for certain sequences
+    elif PSD == 'sprlio':
+        classification['Measurement'] = ['T2*']
+        classification['Intent'] = ['Functional']
+    elif PSD == 'sprl_hos':
+        classification['Intent'] = ['Shim']
+    elif PSD == 'spep_cni':
+        classification['Measurement'] = ['ASL']
+        classification['Intent'] = ['Functional']
+    elif PSD == 'sprt':
+        classification['Measurement'] = ['B0']
+        classification['Intent'] = ['Fieldmap']
+    elif PSD.startswith('nfl') or PSD.startswith('special') or PSD.startswith('probe-mega') or PSD.startswith('imspecial') or PSD.startswith('gaba'):
+        classification['Measurement'] = ['Spectroscopy']
+
+    # # PSD classification
+    # multiband_feature = {'Features': ['Multi-Band']}
+    # if PSD.startswith('mux'):
+    #     if isinstance(classification, dict):
+    #         classification.update(multiband_feature)
+    #     # Else classification is a list, assign dict with intent
+    #     else:
+    #         classification = multiband_feature
+
+    # Add the PSD to the custom classifications
+    custom = {'Custom': [PSD]}
+    if isinstance(classification, dict):
+        classification.update(custom)
+    else:
+        classification = custom
+
+    return classification
+
 
 def dicom_classify(zip_file_path, outbase, timezone, config_file=None):
     """
@@ -444,22 +498,32 @@ def dicom_classify(zip_file_path, outbase, timezone, config_file=None):
     # Acquisition metadata from dicom header
     dicom_file['info'] = get_dicom_header(dcm)
 
+    if dicom_file['info'].has_key('psd'):
+        PSD = dicom_file['info']['psd'].lower()
+    else:
+        PSD = ''
+
     # Modality
     if hasattr(dcm, 'Modality') and dcm.get('Modality'):
         metadata['acquisition']['instrument'] = format_string(dcm.get('Modality'))
 
-    # Classification (TRY BY PSD FIRST? TODO)
     series_desc = format_string(dcm.get('SeriesDescription', ''))
     if series_desc:
         metadata['acquisition']['label'] = series_desc
+
+    # Classification
+    if series_desc:
         classification = get_custom_classification(series_desc, config_file)
         log.info('Custom classification from config: %s', classification)
-        if not classification:
-            classification = classification_from_label.infer_classification(series_desc)
-            log.info('Inferred classification from label: %s', classification)
-        dicom_file['classification'] = classification
+    if not classification and PSD:
+        classification = get_psd_classification(PSD, series_desc)
+        log.info('Custom classification from PSD: %s', classification)
+    if not classification and series_desc:
+        classification = classification_from_label.infer_classification(series_desc)
+        log.info('Inferred classification from label: %s', classification)
+    dicom_file['classification'] = classification
 
-    # If no pixel data present, make classification intent "Non-Image"
+    # If no pixel data are present, make classification intent "Non-Image"
     if not hasattr(dcm, 'PixelData'):
         nonimage_intent = {'Intent': ['Non-Image']}
         # If classification is a dict, update dict with intent
@@ -468,16 +532,6 @@ def dicom_classify(zip_file_path, outbase, timezone, config_file=None):
         # Else classification is a list, assign dict with intent
         else:
             dicom_file['classification'] = nonimage_intent
-
-    # TODO PSD classification
-    if hasattr(dicom_file['info'], 'psd'):
-        PSD = dicom_file['info']['psd'].lower()
-        multiband_feature = {'Features': ['Multi-Band']}
-        if PSD.startswith('mux'):
-            dicom_file['classification'].update(multiband_feature)
-        # Add the PSD to the custom classifications
-        custom = {'Custom': [PSD]}
-        dicom_file['classification'].update(custom)
 
     # Siemens header
     if dcm.get('Manufacturer') == 'SIEMENS':

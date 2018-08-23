@@ -1,25 +1,25 @@
 {
   "name": "cni-dicom-mr-classifier",
   "label": "CNI: DICOM MR Classifier",
-  "description": "Extract metadata and determine classification from raw DICOM data. Compatible with Siemens, Philips, and GE DICOMs.",
+  "description": "Extract metadata and determine classification from GE DICOM data.",
   "maintainer": "Michael Perry <lmperry@stanford.edu>",
   "author": "Michael Perry <lmperry@stanford.edu>",
   "url": "https://scitran.github.io",
   "source": "https://github.com/scitran-apps/dicom-mr-classifier",
   "license": "Apache-2.0",
   "flywheel": "0",
-  "version": "1.0.0_rc1",
+  "version": "1.0.0",
   "custom": {
-    "docker-image": "stanfordcni/cni-dicom-mr-classifier:1.0.0_rc1"
+    "docker-image": "stanfordcni/cni-dicom-mr-classifier:1.0.0"
   },
   "config": {
     "timezone": {
-      "description": "Time Zone to which all timestamps should be localized. This will set the default time zone in the Gear and thus localize the timestamps to that time zone. Examples: 'America/Los_Angeles', 'America/New_York'. [default = 'UTC'].",
+      "description": "Time Zone to which all timestamps should be localized. This will set the default time zone in the Gear and thus localize the timestamps to that time zone. Examples: 'America/Los_Angeles', 'America/New_York'. [default = 'America/Los_Angeles'].",
       "type": "string",
       "default": "America/Los_Angeles"
     },
     "sync": {
-      "description": "Synchronize classification definitions with the latest known updates found at cni/cni-dicom-mr-classifier [default = false].",
+      "description": "Synchronize classification definitions with the latest known updates found at cni/cni-dicom-mr-classifier [default = true].",
       "type": "boolean",
       "default": true
     }
