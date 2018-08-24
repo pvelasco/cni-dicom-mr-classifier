@@ -383,6 +383,12 @@ def get_psd_classification(PSD, SERIES_DESCRIPTION):
     else:
         classification = custom
 
+    # If there was no measuremet or Intent then get the class from the label.
+    if not classification.has_key('Measurement') or not classification.has_key('Intent'):
+        class2 = classification_from_label.infer_classification(SERIES_DESCRIPTION)
+        if class2:
+            classification.update(class2)
+
     return classification
 
 
