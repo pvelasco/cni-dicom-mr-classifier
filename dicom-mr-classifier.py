@@ -539,6 +539,26 @@ def dicom_classify(zip_file_path, outbase, timezone, config_file=None):
         else:
             dicom_file['classification'] = nonimage_intent
 
+    # If this scan was imported from NIMS add the custom classification 'NIMS'
+    if dicom_file['info'].has_key('StudyID'):
+        try:
+            EXAM_NUMBER = int(dicom_file['info']['StudyID'])
+        except:
+            EXAM_NUMBER = None
+    else:
+        EXAM_NUMBER = None
+
+    if EXAM_NUMBER and EXAM_NUMBER < 18426: # Magic number - last scan in NIMS
+        custom = {'Custom': ['NIMS']}
+        if isinstance(classification, dict):
+            if classification.has_key('Custom') and isinstance(classification['Custom'], list):
+                classification['Custom'].append('NIMS')
+            else:
+                classification.update(custom)
+        else:
+            dicom_file['classification'] = custom
+
+
     # Siemens header
     if dcm.get('Manufacturer') == 'SIEMENS':
         csa_header = get_csa_header(dcm)
