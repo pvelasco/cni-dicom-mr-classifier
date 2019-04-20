@@ -4,15 +4,17 @@ import os
 import re
 import json
 import pytz
-import dicom
 import string
 import tzlocal
 import logging
 import zipfile
 import datetime
-import classification_from_label
-from fnmatch import fnmatch
+import argparse
+import pydicom as dicom
 from pprint import pprint
+from fnmatch import fnmatch
+import classification_from_label
+import nibabel.nicom.dicomwrappers
 
 logging.basicConfig()
 log = logging.getLogger('dicom-mr-classifier')
@@ -31,7 +33,9 @@ def get_session_label(dcm):
 
 
 def validate_timezone(zone):
-    # pylint: disable=missing-docstring
+    """
+    Validate zone using pytz.
+    """
     if zone is None:
         zone = tzlocal.get_localzone()
     else:
@@ -148,14 +152,15 @@ def assign_type(s):
     """
     Sets the type of a given input.
     """
+    if type(s) == dicom.valuerep.PersonName or type(s) == dicom.valuerep.PersonName3 or type(s) == dicom.valuerep.PersonNameBase:
+        return format_string(s)
     if type(s) == list or type(s) == dicom.multival.MultiValue:
         try:
-            return [ int(x) for x in s ]
+            return [ float(x) for x in s if x.is_integer() == False ]
         except ValueError:
-            try:
-                return [ float(x) for x in s ]
-            except ValueError:
-                return [ format_string(x) for x in s if len(x) > 0 ]
+            return [ format_string(x) for x in s if len(x) > 0 ]
+    elif type(s) == float or type(s) == int:
+        return s
     else:
         s = str(s)
         try:
@@ -168,7 +173,10 @@ def assign_type(s):
 
 
 def format_string(in_string):
-    formatted = re.sub(r'[^\x00-\x7f]',r'', str(in_string)) # Remove non-ascii characters
+    """
+    Remove non-ascii characters to make sure the values will display properly
+    """
+    formatted = re.sub(r'[^\x00-\x7f]',r'', str(in_string))
     formatted = filter(lambda x: x in string.printable, formatted)
     if len(formatted) == 1 and formatted == '?':
         formatted = None
@@ -176,6 +184,9 @@ def format_string(in_string):
 
 
 def get_seq_data(sequence, ignore_keys):
+    """
+    For a given sequence, iterate through the seq and extract key values.
+    """
     seq_dict = {}
     for seq in sequence:
         for s_key in seq.dir():
@@ -199,11 +210,15 @@ def get_seq_data(sequence, ignore_keys):
     return seq_dict
 
 def get_dicom_header(dcm):
-    # Extract the header values
+    """
+    Extract the header values from the loaded dicom file.
+    Returns header.
+    """
     header = {}
 
     # Attempt to use key to get PSD
     try:
+        # (GE DICOMS)
         header['psd'] = str(dcm[0x019, 0x109c].value)
     except:
         pass
@@ -235,8 +250,10 @@ def get_dicom_header(dcm):
     return header
 
 def get_csa_header(dcm):
-    import dicom
-    import nibabel.nicom.dicomwrappers
+    """
+    For Siemens data, use nibabel to extract CSA Header.
+    """
+
     exclude_tags = ['PhoenixZIP', 'SrMsgBuffer']
     header = {}
     try:
@@ -264,6 +281,9 @@ def get_csa_header(dcm):
     return header
 
 def get_classification_from_string(value):
+    """
+    Attempt to generate classificatoin from value string using custom context.
+    """
     result = {}
 
     parts = re.split(r'\s*,\s*', value)
@@ -290,6 +310,10 @@ def get_classification_from_string(value):
     return result
 
 def get_custom_classification(label, config_file):
+    """
+    Use the classifications context from the config file to override default classification
+    criterion.
+    """
     if config_file is None or not os.path.isfile(config_file):
         return None
 
@@ -332,7 +356,9 @@ def get_custom_classification(label, config_file):
     return None
 
 def get_psd_classification(PSD, SERIES_DESCRIPTION):
-    """ Determine classification from the PSD"""
+    """
+    Determine classification from the PSD
+    """
     classification = {}
     # If this  is from one of the muxarcepi sequences (CNI specific), then
     # we use our knowledge of the sequence to classify the file.
@@ -367,15 +393,6 @@ def get_psd_classification(PSD, SERIES_DESCRIPTION):
     elif PSD.startswith('nfl') or PSD.startswith('special') or PSD.startswith('probe-mega') or PSD.startswith('imspecial') or PSD.startswith('gaba'):
         classification['Measurement'] = ['Spectroscopy']
 
-    # # PSD classification
-    # multiband_feature = {'Features': ['Multi-Band']}
-    # if PSD.startswith('mux'):
-    #     if isinstance(classification, dict):
-    #         classification.update(multiband_feature)
-    #     # Else classification is a list, assign dict with intent
-    #     else:
-    #         classification = multiband_feature
-
     # Add the PSD to the custom classifications
     custom = {'Custom': [PSD]}
     if isinstance(classification, dict):
@@ -396,7 +413,6 @@ def dicom_classify(zip_file_path, outbase, timezone, config_file=None):
     """
     Extracts metadata from dicom file header within a zip file and writes to .metadata.json.
     """
-    import dicom
 
     # Check for input file path
     if not os.path.exists(zip_file_path):
@@ -455,6 +471,23 @@ def dicom_classify(zip_file_path, outbase, timezone, config_file=None):
     session_label = get_session_label(dcm)
     if session_label:
         metadata['session']['label'] = session_label
+
+    # Session tags and label
+    if hasattr(dcm, 'AdditionalPatientHistory') and dcm.get('AdditionalPatientHistory'):
+        aph_list = re.findall(r"[\w']+", dcm.get('AdditionalPatientHistory'))
+        tags = [ x.split('tag_')[-1] for x in aph_list if x.startswith('tag_')]
+        if tags:
+            metadata['session']['tags'] = tags
+        label = [ x.split('label_')[-1] for x in aph_list if x.startswith('label_')]
+        if len(label) == 1:
+            metadata['session']['label'] = label[0]
+        if len(label) >1:
+            log.warning('Multiple label values found! Not setting label!')
+            log.warning(label)
+
+    # Set exam on session.
+    if hasattr(dcm, 'StudyID') and dcm.get('StudyID'):
+        metadata['session']['info'] = { "exam": dcm.get('StudyID') }
 
     # Subject Metadata
     metadata['session']['subject'] = {}
@@ -521,13 +554,22 @@ def dicom_classify(zip_file_path, outbase, timezone, config_file=None):
     if series_desc:
         classification = get_custom_classification(series_desc, config_file)
         log.info('Custom classification from config: %s', classification)
+        # Add the PSD to the custom class
+        if PSD:
+            #TODO: Check if custom already exists
+            custom = {'Custom': [PSD]}
+            if isinstance(classification, dict):
+                classification.update(custom)
+            else:
+                classification = custom
     if not classification and PSD:
         classification = get_psd_classification(PSD, series_desc)
         log.info('Custom classification from PSD: %s', classification)
     if not classification and series_desc:
         classification = classification_from_label.infer_classification(series_desc)
         log.info('Inferred classification from label: %s', classification)
-    dicom_file['classification'] = classification
+    if classification:
+        dicom_file['classification'] = classification
 
     # If no pixel data are present, make classification intent "Non-Image"
     if not hasattr(dcm, 'PixelData'):
@@ -583,7 +625,6 @@ if __name__ == '__main__':
     """
     Generate session, subject, and acquisition metatada by parsing the dicom header, using pydicom.
     """
-    import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument('dcmzip', help='path to dicom zip')
     ap.add_argument('outbase', nargs='?', help='outfile name prefix')
