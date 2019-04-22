@@ -24,7 +24,7 @@ RUN apt-get update && apt-get -y install \
 
 # Install scitran.data dependencies
 RUN pip install \
-  pydicom \
+  dicom \
   python-dateutil==2.6.0 \
   pytz==2017.2 \
   tzlocal==1.4 \

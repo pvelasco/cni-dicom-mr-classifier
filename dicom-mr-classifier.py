@@ -10,7 +10,7 @@ import logging
 import zipfile
 import datetime
 import argparse
-import pydicom as dicom
+import dicom
 from pprint import pprint
 from fnmatch import fnmatch
 import classification_from_label
@@ -156,9 +156,12 @@ def assign_type(s):
         return format_string(s)
     if type(s) == list or type(s) == dicom.multival.MultiValue:
         try:
-            return [ float(x) for x in s if x.is_integer() == False ]
+            return [ float(x) for x in s ]
         except ValueError:
-            return [ format_string(x) for x in s if len(x) > 0 ]
+            try:
+                return [ int(x) for x in s ]
+            except ValueError:
+                return [ format_string(x) for x in s if len(x) > 0 ]
     elif type(s) == float or type(s) == int:
         return s
     else:
@@ -170,6 +173,7 @@ def assign_type(s):
                 return float(s)
             except ValueError:
                 return format_string(s)
+
 
 
 def format_string(in_string):
