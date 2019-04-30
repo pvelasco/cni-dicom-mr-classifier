@@ -559,7 +559,7 @@ def dicom_classify(zip_file_path, outbase, timezone, config_file=None):
         classification = get_custom_classification(series_desc, config_file)
         log.info('Custom classification from config: %s', classification)
         # Add the PSD to the custom class
-        if PSD:
+        if classification and PSD:
             #TODO: Check if custom already exists
             custom = {'Custom': [PSD]}
             if isinstance(classification, dict):
