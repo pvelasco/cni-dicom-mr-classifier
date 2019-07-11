@@ -1,26 +1,72 @@
 #!/usr/bin/env python
 '''
 Infer acquisition classification by parsing the description label.
-
-
-Example usage:
-
-    ## Update acquisition measurement in the DB
-    labels=list(db.acquisitions.find({},['label']))
-    labels_only = []
-    for l in labels:
-        labels_only.append(l['label'])
-
-    unique_labels = set(labels_only)
-    uls = list(unique_labels)
-
-    for l in uls:
-        measurement = infer_measurement(l)
-        db.acquisitions.update_many({'label': l}, {'$set': {'measurement': measurement}})
-
 '''
 
 import re
+
+
+def feature_check(label):
+    '''Check the label for a list of features.'''
+
+    feature_list = ['2D', 'AAscout', 'Spin-Echo', 'Gradient-Echo',
+                   'EPI', 'WASSR', 'FAIR', 'FAIREST', 'PASL', 'EPISTAR',
+                   'PICORE', 'pCASL', 'MPRAGE', 'MP2RAGE', 'FLAIR',
+                   'SWI', 'QSM', 'RMS', 'DTI', 'DSI', 'DKI', 'HARDI',
+                   'NODDI', 'Water-Reference', 'Transmit-Reference',
+                   'SBRef', 'Uniform', 'Singlerep', 'QC', 'TRACE',
+                   'FA', 'MIP', 'Navigator', 'Contrast-Agent',
+                   'Phase-Contrast', 'TOF', 'VASO', 'iVASO', 'DSC',
+                   'DCE', 'Task', 'Resting-State', 'PRESS', 'STEAM',
+                   'M0', 'Phase-Reversed', 'Spiral', 'SPGR',
+                   'Quantitative', 'Multi-Shell', 'Multi-Echo', 'Multi-Flip',
+                   'Multi-Band', 'Steady-State', '3D', 'Compressed-Sensing',
+                   'Eddy-Current-Corrected', 'Fieldmap-Corrected',
+                   'Gradient-Unwarped', 'Motion-Corrected', 'Physio-Corrected',
+                   'Derived', 'In-Plane', 'Phase', 'Magnitude']
+
+    return _find_matches(label, feature_list)
+
+
+def measurement_check(label):
+    '''Check the label for a list of measurements.'''
+
+    measurement_list = ['MRA', 'CEST', 'T1rho', 'SVS', 'CSI', 'EPSI', 'BOLD',
+                        'Phoenix','B0', 'B1', 'T1', 'T2', 'T2*', 'PD', 'MT',
+                        'Perfusion','Diffusion', 'Susceptibility', 'Fingerprinting']
+
+    return _find_matches(label, measurement_list)
+
+
+def intent_check(label):
+    '''Check the label for a list of intents.'''
+
+    intent_list = [ 'Localizer', 'Shim', 'Calibration', 'Fieldmap', 'Structural',
+                    'Functional', 'Screenshot', 'Non-Image', 'Spectroscopy' ]
+
+    return _find_matches(label, intent_list)
+
+
+def _find_matches(label, list):
+    """For a given list find those entries that match a given label."""
+
+    matches = []
+
+    for l in list:
+        regex = _compile_regex(l)
+        if regex.findall(label):
+            matches.append(l)
+
+    return matches
+
+
+def _compile_regex(string):
+    """Generate the regex for label checking"""
+
+    regex = re.compile(r"(\b%s\b)|(_%s_)|(_%s)|(%s_)" % (string,string,string,string), re.IGNORECASE)
+
+    return regex
+
 
 # Anatomy, T1
 def is_anatomy_t1(label):
@@ -113,7 +159,8 @@ def is_functional(label):
         re.compile('^Curiosity', re.IGNORECASE),
         re.compile('^DD_', re.IGNORECASE),
         re.compile('^Poke', re.IGNORECASE),
-        re.compile('^Effort', re.IGNORECASE)
+        re.compile('^Effort', re.IGNORECASE),
+        re.compile('emotion|conflict', re.IGNORECASE)
         ]
     return regex_search_label(regexes, label)
 
@@ -235,11 +282,24 @@ def regex_search_label(regexes, label):
 # Spectroscopy
 def is_spectroscopy(label):
     regexes = [
-        re.compile('mip', re.IGNORECASE),
         re.compile('mrs', re.IGNORECASE),
         re.compile('svs', re.IGNORECASE),
-        re.compile('GABA', re.IGNORECASE),
-        re.compile('csi', re.IGNORECASE)
+        re.compile('gaba', re.IGNORECASE),
+        re.compile('csi', re.IGNORECASE),
+        re.compile('nfl', re.IGNORECASE),
+        re.compile('mega', re.IGNORECASE),
+        re.compile('press', re.IGNORECASE),
+        re.compile('spect', re.IGNORECASE)
+        ]
+    return regex_search_label(regexes, label)
+
+# Susceptability
+def is_susceptability(label):
+    regexes = [
+        re.compile('swi', re.IGNORECASE),
+        re.compile('mag_images', re.IGNORECASE),
+        re.compile('pha_images', re.IGNORECASE),
+        re.compile('mip_images', re.IGNORECASE)
         ]
     return regex_search_label(regexes, label)
 
@@ -270,12 +330,12 @@ def infer_classification(label):
         elif is_functional(label):
             classification['Intent'] = ['Functional']
             classification['Measurement'] = ['T2*']
-        elif is_anatomy_t1(label):
-            classification['Intent'] = ['Structural']
-            classification['Measurement'] = ['T1']
         elif is_anatomy_t2(label):
             classification['Intent'] = ['Structural']
             classification['Measurement'] = ['T2']
+        elif is_anatomy_t1(label):
+            classification['Intent'] = ['Structural']
+            classification['Measurement'] = ['T1']
         elif is_anatomy(label):
             classification['Intent'] = ['Structural']
         elif is_localizer(label):
@@ -293,8 +353,10 @@ def infer_classification(label):
             classification['Measurement'] = ['PD']
         elif is_perfusion(label):
             classification['Measurement'] = ['Perfusion']
+        elif is_susceptability(label):
+            classification['Measurement'] = ['Susceptability']
         elif is_spectroscopy(label):
-            classification['Measurement'] = ['Spectroscopy']
+            classification['Intent'] = ['Spectroscopy']
         elif is_phase_map(label):
             classification['Custom'] = ['Phase Map']
         elif is_screenshot(label):
@@ -302,4 +364,26 @@ def infer_classification(label):
         else:
             print label.strip('\n') + ' --->>>> unknown'
 
-    return classification 
+
+        # Add features to classification
+        features = feature_check(label)
+        if features:
+            class_features = classification.get('Features', [])
+            [ class_features.append(x) for x in features if x not in class_features ]
+            classification['Features'] = class_features
+
+        # Add measurements to classification
+        measurements = measurement_check(label)
+        if measurements:
+            class_measurement = classification.get('Measurement', [])
+            [ class_measurement.append(x) for x in measurements if x not in class_measurement ]
+            classification['Measurement'] = class_measurement
+
+        # Add intents to classification
+        intents = intent_check(label)
+        if intents:
+            class_intent = classification.get('Intent', [])
+            [ class_intent.append(x) for x in intents if x not in class_intent ]
+            classification['Intent'] = class_intent
+
+    return classification
