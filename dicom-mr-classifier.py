@@ -392,7 +392,7 @@ def get_psd_classification(PSD, SERIES_DESCRIPTION):
         classification['Measurement'] = ['B0']
         classification['Intent'] = ['Fieldmap']
     elif PSD.startswith('nfl') or PSD.startswith('special') or PSD.startswith('probe-mega') or PSD.startswith('imspecial') or PSD.startswith('gaba'):
-        classification['Measurement'] = ['Spectroscopy']
+        classification['Intent'] = ['Spectroscopy']
 
     # Add the PSD to the custom classifications
     custom = {'Custom': [PSD]}
