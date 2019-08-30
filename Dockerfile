@@ -24,11 +24,13 @@ RUN apt-get update && apt-get -y install \
 
 # Install scitran.data dependencies
 RUN pip install \
-  dicom \
+  dicom==0.9.9-1 \
+  numpy==1.16.4 \
   python-dateutil==2.6.0 \
   pytz==2017.2 \
   tzlocal==1.4 \
   nibabel==2.2.1
+
 
 # Make directory for flywheel spec (v0)
 ENV FLYWHEEL /flywheel/v0
