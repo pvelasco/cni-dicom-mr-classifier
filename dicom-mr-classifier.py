@@ -11,7 +11,7 @@ import zipfile
 import datetime
 import argparse
 import dicom
-from pprint import pprint
+import pprint
 from fnmatch import fnmatch
 import classification_from_label
 import nibabel.nicom.dicomwrappers
@@ -608,7 +608,7 @@ def dicom_classify(zip_file_path, outbase, timezone, config_file=None):
         json.dump(metadata, metafile)
 
     # Show the metadata
-    pprint(metadata)
+    log.info(pprint.pformat(metadata))
 
     return metafile_outname
 
