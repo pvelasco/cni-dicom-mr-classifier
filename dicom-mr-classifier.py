@@ -23,8 +23,7 @@ def get_session_label(dcm):
     """
     Switch on manufacturer and either pull out the StudyID or the StudyInstanceUID
     """
-    session_label = ''
-    if ( dcm.get('Manufacturer') and (dcm.get('Manufacturer').find('GE') != -1 or dcm.get('Manufacturer').find('Philips') != -1 ) and dcm.get('StudyID')):
+    if dcm.get('Manufacturer') and (dcm.get('Manufacturer').find('GE') != -1 or dcm.get('Manufacturer').find('Philips') != -1) and dcm.get('StudyID'):
         session_label = dcm.get('StudyID')
     else:
         session_label = dcm.get('StudyInstanceUID')
@@ -282,7 +281,7 @@ def get_csa_header(dcm):
             value = raw_csa_header['tags'][tag]['items']
             if len(value) == 1:
                 value = value[0]
-                if type(value) == str and ( len(value) > 0 and len(value) < 1024 ):
+                if type(value) == str and (0 < len(value) < 1024):
                     header[format_string(tag)] = format_string(value)
                 else:
                     header[format_string(tag)] = assign_type(value)
@@ -293,7 +292,7 @@ def get_csa_header(dcm):
 
 def get_classification_from_string(value):
     """
-    Attempt to generate classificatoin from value string using custom context.
+    Attempt to generate classification from value string using custom context.
     """
     result = {}
 
@@ -366,46 +365,50 @@ def get_custom_classification(label, config_file):
 
     return None
 
-def get_psd_classification(PSD, SERIES_DESCRIPTION):
+def get_psd_classification(psd, series_description):
     """
     Determine classification from the PSD
     """
     classification = {}
     # If this  is from one of the muxarcepi sequences (CNI specific), then
     # we use our knowledge of the sequence to classify the file.
-    if PSD.startswith('muxarcepi'):
-        if PSD.startswith('muxarcepi2'):
+    if psd.startswith('muxarcepi'):
+        if psd.startswith('muxarcepi2'):
             classification['Measurement'] = ['Diffusion']
             classification['Intent'] = ['Structural']
-        elif PSD.startswith('muxarcepi_IR'):
+        elif psd.startswith('muxarcepi_IR'):
             classification['Measurement'] = ['T1']
             classification['Intent'] = ['Structural']
             classification['Features'] = ['Quantitative']
-        elif PSD == 'muxarcepi_me':
+        elif psd == 'muxarcepi_me':
             classification['Measurement'] = ['T2*']
             classification['Intent'] = ['Functional']
             classification['Features'] = ['Multi-Echo']
-        elif PSD == 'muxarcepi' and SERIES_DESCRIPTION and SERIES_DESCRIPTION.find('fieldmap') == -1:
+        elif psd == 'muxarcepi' and series_description and series_description.find('fieldmap') == -1:
             classification['Measurement'] = ['T2*']
             classification['Intent'] = ['Functional']
 
     # Use priors to determine classification for certain sequences
-    elif PSD == 'sprlio':
+    elif psd == 'sprlio':
         classification['Measurement'] = ['T2*']
         classification['Intent'] = ['Functional']
-    elif PSD == 'sprl_hos':
+    elif psd == 'sprl_hos':
         classification['Intent'] = ['Shim']
-    elif PSD == 'spep_cni':
+    elif psd == 'spep_cni':
         classification['Measurement'] = ['ASL']
         classification['Intent'] = ['Functional']
-    elif PSD == 'sprt':
+    elif psd == 'sprt':
         classification['Measurement'] = ['B0']
         classification['Intent'] = ['Fieldmap']
-    elif PSD.startswith('nfl') or PSD.startswith('special') or PSD.startswith('probe-mega') or PSD.startswith('imspecial') or PSD.startswith('gaba'):
+    elif psd.startswith('nfl') or psd.startswith('special') or psd.startswith('probe-mega') or psd.startswith('imspecial') or psd.startswith('gaba'):
         classification['Intent'] = ['Spectroscopy']
+    elif "hypermepi" in psd:
+        classification['Measurement'] = ['T2*']
+        classification['Intent'] = ['Functional']
+        classification['Features'] = ['Multi-Echo']
 
     # Add the PSD to the custom classifications
-    custom = {'Custom': [PSD]}
+    custom = {'Custom': [psd]}
     if isinstance(classification, dict):
         classification.update(custom)
     else:
@@ -413,7 +416,7 @@ def get_psd_classification(PSD, SERIES_DESCRIPTION):
 
     # If there was no measuremet or Intent then get the class from the label.
     if not classification.has_key('Measurement') or not classification.has_key('Intent'):
-        class2 = classification_from_label.infer_classification(SERIES_DESCRIPTION)
+        class2 = classification_from_label.infer_classification(series_description)
         if class2:
             classification.update(class2)
 
@@ -440,10 +443,10 @@ def dicom_classify(zip_file_path, outbase, timezone, config_file=None):
     # Extract the last file in the zip to /tmp/ and read it
     dcm = []
     if zipfile.is_zipfile(zip_file_path):
-        zip = zipfile.ZipFile(zip_file_path)
-        num_files = len(zip.namelist())
+        _zip = zipfile.ZipFile(zip_file_path)
+        num_files = len(_zip.namelist())
         for n in range((num_files -1), -1, -1):
-            dcm_path = zip.extract(zip.namelist()[n], '/tmp')
+            dcm_path = _zip.extract(_zip.namelist()[n], '/tmp')
             if os.path.isfile(dcm_path):
                 try:
                     log.info('reading %s' % dcm_path)
@@ -470,11 +473,10 @@ def dicom_classify(zip_file_path, outbase, timezone, config_file=None):
         os.sys.exit(1)
 
     # Build metadata
-    metadata = {}
+    metadata = {'session': {}}
 
     # Session metadata
-    metadata['session'] = {}
-    session_timestamp, acquisition_timestamp = get_timestamp(dcm, timezone);
+    session_timestamp, acquisition_timestamp = get_timestamp(dcm, timezone)
     if session_timestamp:
         metadata['session']['timestamp'] = session_timestamp
     if hasattr(dcm, 'OperatorsName') and dcm.get('OperatorsName'):
@@ -515,10 +517,9 @@ def dicom_classify(zip_file_path, outbase, timezone, config_file=None):
             pass
 
     # File classification
-    dicom_file = {}
-    dicom_file['name'] = os.path.basename(zip_file_path)
-    dicom_file['modality'] = format_string(dcm.get('Modality', 'MR'))
-    dicom_file['classification'] = {}
+    dicom_file = {'name': os.path.basename(zip_file_path),
+                  'modality': format_string(dcm.get('Modality', 'MR')),
+                  'classification': {}}
 
     # Acquisition metadata
     metadata['acquisition'] = {}
@@ -530,7 +531,7 @@ def dicom_classify(zip_file_path, outbase, timezone, config_file=None):
     dicom_file['info'] = get_dicom_header(dcm)
 
     if dicom_file['info'].has_key('psd'):
-        PSD = dicom_file['info']['psd'].lower()
+        PSD = dicom_file['info']['psd'].lower().split('/')[-1]
     else:
         PSD = ''
 
@@ -543,23 +544,26 @@ def dicom_classify(zip_file_path, outbase, timezone, config_file=None):
         metadata['acquisition']['label'] = series_desc
 
     # Classification
+    classification = dict()
     if series_desc:
         classification = get_custom_classification(series_desc, config_file)
         log.info('Custom classification from config: %s', classification)
         # Add the PSD to the custom class
         if classification and PSD:
-            #TODO: Check if custom already exists
             custom = {'Custom': [PSD]}
             if isinstance(classification, dict):
                 classification.update(custom)
             else:
                 classification = custom
+
     if not classification and PSD:
         classification = get_psd_classification(PSD, series_desc)
         log.info('Custom classification from PSD: %s', classification)
+
     if not classification and series_desc:
         classification = classification_from_label.infer_classification(series_desc)
         log.info('Inferred classification from label: %s', classification)
+
     if classification:
         dicom_file['classification'] = classification
 

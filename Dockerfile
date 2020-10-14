@@ -1,4 +1,4 @@
-# scitran/dicom-mr-classifier
+# stanfordcni/cni-dicom-mr-classifier
 #
 # Use pyDicom to classify raw DICOM data (zip) from Siemens, GE or Philips.
 #

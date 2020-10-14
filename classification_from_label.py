@@ -1,13 +1,13 @@
 #!/usr/bin/env python
-'''
+"""
 Infer acquisition classification by parsing the description label.
-'''
+"""
 
 import re
 
 
 def feature_check(label):
-    '''Check the label for a list of features.'''
+    """Check the label for a list of features."""
 
     feature_list = ['2D', 'AAscout', 'Spin-Echo', 'Gradient-Echo',
                    'EPI', 'WASSR', 'FAIR', 'FAIREST', 'PASL', 'EPISTAR',
@@ -29,7 +29,7 @@ def feature_check(label):
 
 
 def measurement_check(label):
-    '''Check the label for a list of measurements.'''
+    """Check the label for a list of measurements."""
 
     measurement_list = ['MRA', 'CEST', 'T1rho', 'SVS', 'CSI', 'EPSI', 'BOLD',
                         'Phoenix','B0', 'B1', 'T1', 'T2', 'T2*', 'PD', 'MT',
@@ -39,7 +39,7 @@ def measurement_check(label):
 
 
 def intent_check(label):
-    '''Check the label for a list of intents.'''
+    """Check the label for a list of intents."""
 
     intent_list = [ 'Localizer', 'Shim', 'Calibration', 'Fieldmap', 'Structural',
                     'Functional', 'Screenshot', 'Non-Image', 'Spectroscopy' ]
@@ -47,12 +47,12 @@ def intent_check(label):
     return _find_matches(label, intent_list)
 
 
-def _find_matches(label, list):
+def _find_matches(label, inlist):
     """For a given list find those entries that match a given label."""
 
     matches = []
 
-    for l in list:
+    for l in inlist:
         regex = _compile_regex(l)
         if regex.findall(label):
             matches.append(l)
@@ -79,8 +79,8 @@ def is_anatomy_t1(label):
     regexes = [
         re.compile('t1', re.IGNORECASE),
         re.compile('t1w', re.IGNORECASE),
-        re.compile('(?=.*3d anat)(?![inplane])', re.IGNORECASE),
-        re.compile('(?=.*3d)(?=.*bravo)(?![inplane])', re.IGNORECASE),
+        re.compile('(?=.*3d anat)(?!inplane)', re.IGNORECASE),
+        re.compile('(?=.*3d)(?=.*bravo)(?!inplane)', re.IGNORECASE),
         re.compile('spgr', re.IGNORECASE),
         re.compile('tfl', re.IGNORECASE),
         re.compile('mprage', re.IGNORECASE),
@@ -360,7 +360,7 @@ def infer_classification(label):
         elif is_perfusion(label):
             classification['Measurement'] = ['Perfusion']
         elif is_susceptability(label):
-            classification['Measurement'] = ['Susceptability']
+            classification['Measurement'] = ['Susceptibility']
         elif is_spectroscopy(label):
             classification['Intent'] = ['Spectroscopy']
         elif is_phase_map(label):
@@ -368,7 +368,7 @@ def infer_classification(label):
         elif is_screenshot(label):
             classification['Intent'] = ['Screenshot']
         else:
-            print label.strip('\n') + ' --->>>> unknown'
+            print(label.strip('\n') + ' --->>>> unknown')
 
 
         # Add features to classification
