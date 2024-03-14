@@ -4,8 +4,8 @@
   "description": "Extract metadata and determine classification from raw DICOM data. Compatible with Siemens, Philips, and GE DICOMs.",
   "maintainer": "Michael Perry <lmperry@stanford.edu>",
   "author": "Michael Perry <lmperry@stanford.edu>",
-  "url": "https://scitran.github.io",
-  "source": "https://github.com/scitran-apps/dicom-mr-classifier",
+  "url": "https://github.com/cni/cni-dicom-mr-classifier",
+  "source": "https://scitran.github.io",
   "license": "Apache-2.0",
   "flywheel": "0",
   "version": "0.8.1",
@@ -13,7 +13,28 @@
     "docker-image": "scitran/dicom-mr-classifier:0.8.1",
     "flywheel": {
       "uid": 1000,
-      "gid": 1000
+      "gid": 1000,
+      "classification": {
+        "species": [
+          ""
+        ],
+        "organ": [
+          ""
+        ],
+        "therapeutic_area": [
+          ""
+        ],
+        "modality": [
+          ""
+        ],
+        "function": [
+          ""
+        ]
+      },
+      "suite": ""
+    },
+    "gear-builder": {
+      "category": "converter"
     }
   },
   "config": {
